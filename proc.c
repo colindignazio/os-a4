@@ -73,6 +73,11 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->ctime = 0;
+  p->stime = 0;
+  p->retime = 0;
+  p->rutime = 0;
+
   return p;
 }
 
@@ -482,4 +487,46 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+void incrementProcTicks()
+{
+  struct proc *p;
+
+  // Loop over process table incrementing counters.
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING)
+      p->stime++;
+    else if(p->state == RUNNABLE)
+      p->retime++;
+    else if(p->state == RUNNING)
+      p->rutime++;
+  }
+  release(&ptable.lock);
+}
+
+int wait2(int *retime, int *rutime, int *stime)
+{
+  int pid;
+  struct proc *p;
+
+  pid = wait();
+
+  if(pid == -1)
+    return -1;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid){
+      *retime = p->retime;
+      *rutime = p->rutime;
+      *stime = p->stime;
+      release(&ptable.lock);
+      return pid;
+    }
+  }
+
+  release(&ptable.lock);
+  return -1;
 }

@@ -47,6 +47,7 @@ trap(struct trapframe *tf)
   }
 
   switch(tf->trapno){
+  // CPU Tick Interupt
   case T_IRQ0 + IRQ_TIMER:
     if(cpunum() == 0){
       acquire(&tickslock);
@@ -54,6 +55,7 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
     }
+    incrementProcTicks();
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:
