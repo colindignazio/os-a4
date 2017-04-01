@@ -67,6 +67,8 @@ struct proc {
   int stime;                   // Ticks sleeping
   int retime;                  // Ticks ready
   int rutime;                  // Ticks running
+  int priority;		       // Process priority (3=HIGH)
+  int tickcounter;	       // Track ticks for DML
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -78,3 +80,6 @@ struct proc {
 
 void incrementProcTicks(void);
 int wait2(int*, int*, int*);
+int set_prio(int);
+int inctickcounter();
+void decprio(void);

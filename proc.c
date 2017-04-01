@@ -96,6 +96,7 @@ userinit(void)
     panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->sz = PGSIZE;
+  p->priority = 2;
   memset(p->tf, 0, sizeof(*p->tf));
   p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
   p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
@@ -163,6 +164,9 @@ fork(void)
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
+
+  // Copy priority on fork
+  np->priority = proc->priority;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -273,6 +277,48 @@ wait(void)
   }
 }
 
+#if defined(SML) || defined(DML)
+/*
+  this method will find the next process to run
+*/
+struct proc* getProc(int *index1, int *index2, int *index3, uint *priority) {
+  int i;
+  struct proc* foundProc;
+notfound:
+  for (i = 0; i < NPROC; i++) {
+    switch(*priority) {
+      case 1:
+        foundProc = &ptable.proc[(*index1 + i) % NPROC];
+        if (foundProc->state == RUNNABLE && foundProc->priority == *priority) {
+          *index1 = (*index1 + 1 + i) % NPROC;
+          return foundProc;
+        }
+      case 2:
+        foundProc = &ptable.proc[(*index2 + i) % NPROC];
+        if (foundProc->state == RUNNABLE && foundProc->priority == *priority) {
+          *index2 = (*index2 + 1 + i) % NPROC;
+          return foundProc;
+        }
+      case 3:
+        foundProc = &ptable.proc[(*index3 + i) % NPROC];
+        if (foundProc->state == RUNNABLE && foundProc->priority == *priority){
+          *index3 = (*index3 + 1 + i) % NPROC;
+          return foundProc;
+        }
+    }
+  }
+  if (*priority == 1) {
+    *priority = 3;
+    return 0;
+  }
+  else {
+    *priority -= 1; 
+    goto notfound;
+  }
+  return 0;
+}
+#endif
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -285,6 +331,15 @@ void
 scheduler(void)
 {
   struct proc *p;
+  int index1 = 0;
+  int index2 = 0;
+  int index3 = 0;
+  int temp = 0;
+  //Stop the compiler from complaining about unuser vars
+  temp = index1;
+  temp = index2;
+  temp = index3;
+  index1 = temp;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -292,6 +347,7 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    #ifdef DEFAULT
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
@@ -309,6 +365,69 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       proc = 0;
     }
+
+    #elif FCFS
+
+    struct proc *minProc = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE){
+        if(minProc != 0){
+          if(p->ctime < minProc->ctime) {
+            minProc = p;
+          }
+        } else {
+          minProc = p;
+        }
+      }
+    }
+
+      if(minProc != 0) {
+        p = minProc;
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        swtch(&cpu->scheduler, p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        proc = 0;
+      }
+
+    #elif SML
+
+    uint priority = 3;
+    p = getProc(&index1, &index2, &index3, &priority);
+    if (p == 0) {
+      release(&ptable.lock);
+      continue;
+    }
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
+    proc = 0;
+
+    #elif DML
+
+    uint priority = 3;
+    p = getProc(&index1, &index2, &index3, &priority);
+    if (p == 0) {
+      release(&ptable.lock);
+      continue;
+    }
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
+    proc = 0;
+
+    #endif
     release(&ptable.lock);
 
   }
@@ -418,6 +537,9 @@ wakeup1(void *chan)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
+      #ifdef DML
+      p->priority = 3; // Set to highest priority after sleep
+      #endif
 }
 
 // Wake up all processes sleeping on chan.
@@ -551,4 +673,29 @@ int wait2(int *retime, int *rutime, int *stime)
     // Wait for children to exit.  (See wakeup1 call in proc_exit.)
     sleep(proc, &ptable.lock);  //DOC: wait-sleep
   }
+}
+
+int set_prio(int priority)
+{
+  if(priority < 1 || priority > 3)
+    return 1;
+  acquire(&ptable.lock);
+  proc->priority = priority;
+  release(&ptable.lock);
+  return 0;
+}
+
+void decprio(void) {
+  if(proc->priority > 1)
+    proc->priority = proc->priority-1;
+  else
+    proc->priority = 1;
+}
+
+int inctickcounter() {
+  int res;
+  acquire(&ptable.lock);
+  res = ++proc->tickcounter;
+  release(&ptable.lock);
+  return res;
 }
