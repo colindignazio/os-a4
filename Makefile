@@ -172,6 +172,7 @@ UPROGS=\
 	_mkdir\
 	_rm\
 	_sanity\
+        _SMLsanity\
 	_sh\
 	_stressfs\
 	_usertests\
