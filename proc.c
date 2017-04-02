@@ -73,7 +73,7 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  p->ctime = 0;
+  p->ctime = ticks;
   p->stime = 0;
   p->retime = 0;
   p->rutime = 0;
@@ -95,6 +95,10 @@ userinit(void)
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
+  p->ctime = ticks;
+  p->stime = 0;
+  p->retime = 0;
+  p->rutime = 0;
   p->sz = PGSIZE;
   p->priority = 2;
   memset(p->tf, 0, sizeof(*p->tf));

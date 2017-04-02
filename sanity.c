@@ -14,8 +14,9 @@ static const char IO_NAME[] = "I/O";
 void cpuBoundProcess(){
 	int i, j;
 
-	for(i = 0; i < 100; i++)
+	for(i = 0; i < 100; i++){
 		for(j = 0; j < 1000000; j++);
+	}
 }
 
 void scpuBoundProcess(){
@@ -23,7 +24,7 @@ void scpuBoundProcess(){
 
 	for(i = 0; i < 100; i++) {
 		for(j = 0; j < 1000000; j++);
-		//yield();
+		yield();
 	}
 
 }
@@ -31,8 +32,9 @@ void scpuBoundProcess(){
 void ioBoundProcess(){
 	int i;
 
-	for(i = 0; i < 100; i++)
+	for(i = 0; i < 100; i++){
 		sleep(1);
+	}
 }
 
 PROC_TYPE getProcType(int pid){
