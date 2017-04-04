@@ -349,6 +349,9 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
+    if(ticks % QUANTA != 0)
+      continue;
+
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     #ifdef DEFAULT
